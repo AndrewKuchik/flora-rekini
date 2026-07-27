@@ -581,21 +581,30 @@ document.getElementById('modalSave').addEventListener('click',()=>{
 document.getElementById('modalCancel').addEventListener('click',closeModal);
 document.getElementById('editProfile').addEventListener('click',e=>{ e.preventDefault(); openProfileModal(false); });
 
-/* PDF: прямое скачивание, без диалога печати */
+/* PDF: прямое скачивание, без диалога печати.
+   Лист клонируется в изолированный контейнер (без центрирования и масштаба) —
+   иначе html2canvas сдвигает захват и срезает левую часть. Натуральная высота
+   клона гарантирует ровно одну страницу (без фантомной второй от округления). */
 document.getElementById('pdfBtn').addEventListener('click',async()=>{
   const btn=document.getElementById('pdfBtn'); const old=btn.textContent; btn.textContent='Готовлю PDF…'; btn.disabled=true;
-  const page=document.getElementById('page'); const prevScale=page.style.getPropertyValue('--scale');
-  page.style.setProperty('--scale','1');
-  try{ if(document.fonts&&document.fonts.ready) await document.fonts.ready; }catch(e){}
+  const src=document.getElementById('page');
+  const clone=src.cloneNode(true);
+  clone.style.transform='none'; clone.style.boxShadow='none'; clone.style.borderRadius='0';
+  clone.style.margin='0'; clone.style.width='210mm'; clone.style.minHeight='0';
+  const holder=document.createElement('div');
+  holder.style.cssText='position:fixed;left:0;top:0;z-index:-1;background:#fff;';
+  holder.appendChild(clone); document.body.appendChild(holder);
   try{
+    if(document.fonts&&document.fonts.ready) await document.fonts.ready;
     await html2pdf().set({
       margin:0, filename:`Rekins_${state.number}.pdf`,
       image:{type:'jpeg',quality:0.98},
-      html2canvas:{scale:3,useCORS:true,backgroundColor:P.paper||'#ffffff',windowWidth:page.scrollWidth},
-      jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
-    }).from(page).save();
+      html2canvas:{scale:3,useCORS:true,backgroundColor:P.paper||'#ffffff'},
+      jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
+      pagebreak:{mode:['avoid-all']}
+    }).from(clone).save();
   }catch(err){ alert('Не удалось собрать PDF: '+err+'\nМожно воспользоваться кнопкой «Печать» → «Сохранить как PDF».'); }
-  page.style.setProperty('--scale',prevScale||''); btn.textContent=old; btn.disabled=false;
+  holder.remove(); btn.textContent=old; btn.disabled=false;
 });
 document.getElementById('xmlBtn').addEventListener('click',()=>{
   download(`Rekins_${state.number}.xml`, buildUBL(), 'application/xml;charset=utf-8');
