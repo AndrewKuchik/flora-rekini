@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FLORA · Rēķini</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"></script>
+<style>
+  :root{
+    --accent:#E8622C; --ink:#1c1c1e; --muted:#6b7280; --line:#e6e6ea;
+    --bg:#f4f4f6; --panel:#ffffff;
+    --font:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+    --display:'Manrope','Inter',sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:var(--font);color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased}
+
+  .app{display:grid;grid-template-columns:390px 1fr;min-height:100vh}
+  .editor{background:var(--panel);border-right:1px solid var(--line);padding:22px 20px 60px;overflow-y:auto;height:100vh}
+  .stage{padding:28px;display:flex;justify-content:center;align-items:flex-start;overflow-y:auto;height:100vh}
+
+  .brandbar{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+  .brandbar .dot{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#F7A928,#E8622C 45%,#D6337E);flex:0 0 auto}
+  .brandbar b{font-family:var(--display);font-size:18px;letter-spacing:.02em}
+  .brandbar span{color:var(--muted);font-size:12px;margin-left:auto}
+
+  .group{margin-bottom:18px}
+  .group>.gt{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600;margin:0 0 8px}
+  label.f{display:block;margin-bottom:10px}
+  label.f>span{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+  input,select,textarea{width:100%;font-family:var(--font);font-size:14px;color:var(--ink);
+    padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:#fbfbfc;outline:none}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px rgba(232,98,44,.12)}
+  textarea{resize:vertical;min-height:44px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .row3{display:grid;grid-template-columns:1.4fr .8fr .8fr;gap:10px}
+
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .chip{font-size:12px;padding:5px 10px;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer;color:var(--muted)}
+  .chip:hover{border-color:var(--accent);color:var(--accent)}
+
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;
+    font-family:var(--font);font-size:14px;font-weight:600;padding:12px 14px;border-radius:11px;border:0;cursor:pointer}
+  .btn.primary{background:var(--accent);color:#fff}
+  .btn.primary:hover{filter:brightness(1.05)}
+  .btn.ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}
+  .btn.ghost:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.sm{padding:9px 10px;font-size:12.5px}
+  .actions{position:sticky;bottom:0;background:linear-gradient(180deg,rgba(255,255,255,0),#fff 30%);
+    padding-top:14px;margin-top:6px;display:grid;gap:8px}
+
+  .hint{font-size:11px;color:var(--muted);line-height:1.5;margin-top:6px}
+  .logo-pick{display:flex;align-items:center;gap:10px}
+  .logo-prev{width:48px;height:48px;border-radius:9px;border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff;flex:0 0 auto}
+  .logo-prev img{max-width:100%;max-height:100%;object-fit:contain}
+  .logo-btns{display:flex;gap:6px;flex:1}
+
+  .swatches{display:flex;gap:8px;flex-wrap:wrap}
+  .sw{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid #fff;box-shadow:0 0 0 1px var(--line)}
+  .sw.active{box-shadow:0 0 0 2px var(--accent)}
+  .sw-lbl{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .pw{padding:6px 10px;border-radius:8px;border:1px solid var(--line);cursor:pointer;font-size:12px;color:var(--muted);background:#fff}
+  .pw.active{border-color:var(--accent);color:var(--accent);font-weight:600}
+  input[type=color]{padding:2px;width:38px;height:30px;border-radius:8px;cursor:pointer}
+
+  .paper-wrap{width:100%;max-width:820px}
+  .page{background-color:#fff;width:210mm;min-height:297mm;margin:0 auto;
+    box-shadow:0 10px 40px rgba(20,20,40,.12);border-radius:2px;
+    transform-origin:top center;transform:scale(var(--scale,0.86));padding:18mm 16mm 16mm}
+  @media(max-width:1200px){.page{transform:scale(var(--scale,0.60))}}
+
+  .inv{font-size:11.5px;color:#26262b;line-height:1.5;position:relative;z-index:1}
+  .inv .top{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;padding-bottom:16px;border-bottom:2px solid var(--accent)}
+  .inv .logo{display:flex;align-items:center;gap:12px}
+  .inv .logo .mark{width:46px;height:46px;border-radius:11px;background:linear-gradient(135deg,#F7A928,#E8622C 45%,#D6337E);flex:0 0 auto}
+  .inv .logo img{max-height:56px;max-width:180px;object-fit:contain}
+  .inv .logo .name{font-family:var(--display);font-size:22px;letter-spacing:.14em}
+  .inv .logo .sub{font-size:9px;letter-spacing:.32em;color:var(--muted);text-transform:uppercase;margin-top:2px}
+  .inv .docmeta{text-align:right}
+  .inv .docmeta .title{font-family:var(--display);font-size:19px;font-weight:800;color:var(--ink)}
+  .inv .docmeta .mrow{display:flex;justify-content:flex-end;gap:12px;margin-top:6px;font-size:11px}
+  .inv .docmeta .mrow .k{color:var(--muted)}
+  .inv .docmeta .mrow .v{min-width:74px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+
+  .inv .parties{display:grid;grid-template-columns:1fr 1fr;gap:26px;margin-top:20px}
+  .inv .party .plabel{font-size:9px;text-transform:uppercase;letter-spacing:.11em;color:var(--accent);font-weight:700;margin-bottom:6px}
+  .inv .party .pname{font-size:13px;font-weight:600;margin-bottom:3px}
+  .inv .kv{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin-top:6px;font-size:10.5px}
+  .inv .kv .k{color:var(--muted)}
+  .inv .kv .v{font-variant-numeric:tabular-nums}
+
+  .inv table{width:100%;border-collapse:collapse;margin-top:22px}
+  .inv thead th{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;
+    text-align:right;padding:0 8px 8px;border-bottom:1px solid var(--line)}
+  .inv thead th.l{text-align:left}
+  .inv tbody td{padding:11px 8px;border-bottom:1px solid #f1f1f4;text-align:right;font-variant-numeric:tabular-nums}
+  .inv tbody td.l{text-align:left}
+  .inv tbody td .desc{font-weight:500}
+
+  .inv .foot{display:grid;grid-template-columns:1.3fr 1fr;gap:26px;margin-top:18px}
+  .inv .words{font-size:10.5px;color:#3a3a40}
+  .inv .words .wl{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:3px}
+  .inv .words .wv{font-style:italic}
+  .inv .totals{font-size:11.5px}
+  .inv .totals .tr{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f1f4}
+  .inv .totals .tr .tk{color:var(--muted)}
+  .inv .totals .tr .tv{font-variant-numeric:tabular-nums}
+  .inv .totals .grand{border-bottom:0;margin-top:4px;padding-top:9px;border-top:2px solid var(--accent);font-size:15px;font-weight:700}
+  .inv .totals .grand .tv{color:var(--accent)}
+  .inv .note{margin-top:34px;padding-top:12px;border-top:1px solid var(--line);font-size:9.5px;color:var(--muted);text-align:center}
+
+  /* модалка реквизитов */
+  .modal-bg{display:none;position:fixed;inset:0;background:rgba(20,20,30,.45);z-index:50;align-items:center;justify-content:center;padding:20px}
+  .modal{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:460px;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+  .modal h3{font-family:var(--display);margin:0 0 4px;font-size:19px}
+  .modal .msub{color:var(--muted);font-size:12px;margin:0 0 16px}
+
+  @media print{
+    @page{size:A4;margin:14mm}
+    body{background:#fff}
+    .editor,.stage-tools{display:none!important}
+    .app{display:block}
+    .stage{padding:0;height:auto;overflow:visible}
+    .paper-wrap{max-width:none}
+    .page{transform:none!important;box-shadow:none;width:auto;min-height:auto;padding:0;margin:0}
+  }
+  .stage-tools{display:flex;gap:8px;align-items:center;margin-bottom:14px;color:var(--muted);font-size:12px}
+  .stage-inner{width:100%;display:flex;flex-direction:column;align-items:center}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="editor">
+    <div class="brandbar"><div class="dot"></div><b>FLORA · Rēķini</b><span id="autosave">сохранено</span></div>
+
+    <div class="group">
+      <p class="gt">Счёт</p>
+      <div class="row2">
+        <label class="f"><span>Номер</span><input id="number" inputmode="numeric"></label>
+        <label class="f"><span>Дата</span><input id="issueDate" type="date"></label>
+      </div>
+      <label class="f"><span>Оплатить до</span><input id="dueDate" type="date">
+        <div class="chips">
+          <span class="chip" data-due="7">+7 дней</span>
+          <span class="chip" data-due="14">+14 дней</span>
+          <span class="chip" data-due="eom">конец месяца</span>
+        </div>
+      </label>
+    </div>
+
+    <div class="group">
+      <p class="gt">Клиент (получатель)</p>
+      <label class="f"><span>Из избранного</span><select id="clientPick"></select></label>
+      <label class="f"><span>Название</span><input id="cName"></label>
+      <div class="row2">
+        <label class="f"><span>Reģ. Nr.</span><input id="cReg"></label>
+        <label class="f"><span>PVN Nr.</span><input id="cVat"></label>
+      </div>
+      <label class="f"><span>Адрес</span><input id="cAddr"></label>
+      <div class="row2">
+        <button class="btn ghost sm" id="saveClient">＋ Сохранить клиента</button>
+        <button class="btn ghost sm" id="delClient">🗑 Удалить</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <p class="gt">Услуга</p>
+      <label class="f"><span>Описание</span><textarea id="lDesc"></textarea>
+        <div class="chips">
+          <span class="chip" data-desc="Foto un video pakalpojumi">Foto/video</span>
+          <span class="chip" data-desc="Video filmēšana">Video</span>
+          <span class="chip" data-desc="skaņu ieraksts">Skaņu ieraksts</span>
+        </div>
+      </label>
+      <div class="row3">
+        <label class="f"><span>Цена €</span><input id="lPrice" inputmode="decimal"></label>
+        <label class="f"><span>Кол-во</span><input id="lQty" inputmode="decimal" value="1"></label>
+        <label class="f"><span>Ед.</span>
+          <select id="lUnit">
+            <option>gab.</option><option>reize</option><option>h</option><option>diena</option><option>komplekts</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <div class="group">
+      <p class="gt">Оформление</p>
+      <label class="f"><span>Акцентный цвет</span>
+        <div class="sw-lbl"><div class="swatches" id="accentSw"></div><input type="color" id="accentCustom" title="свой цвет"></div>
+      </label>
+      <label class="f"><span>Цвет бумаги</span><div class="sw-lbl" id="paperSw"></div></label>
+      <label class="f"><span>Фактура</span><div class="sw-lbl" id="textureSw"></div></label>
+    </div>
+
+    <div class="group">
+      <p class="gt">Логотип · мои данные</p>
+      <div class="logo-pick">
+        <div class="logo-prev" id="logoPrev"><span style="font-size:9px;color:#bbb">FLORA</span></div>
+        <div class="logo-btns">
+          <button class="btn ghost sm" id="logoBtn">Загрузить</button>
+          <button class="btn ghost sm" id="logoDel" style="display:none">✕ Удалить</button>
+        </div>
+        <input type="file" id="logoFile" accept="image/*" hidden>
+      </div>
+      <p class="hint"><a href="#" id="editProfile">Изменить мои реквизиты</a> · всё хранится только в этом браузере</p>
+    </div>
+
+    <div class="actions">
+      <button class="btn primary" id="pdfBtn">💾 Скачать PDF</button>
+      <div class="row2">
+        <button class="btn ghost sm" id="xmlBtn">⤓ XML (e-rēķins)</button>
+        <button class="btn ghost sm" id="printBtn">🖨 Печать</button>
+      </div>
+      <button class="btn ghost" id="newBtn">Новый счёт (следующий номер)</button>
+    </div>
+  </aside>
+
+  <main class="stage">
+    <div class="stage-inner">
+      <div class="stage-tools">Живой предпросмотр · A4 · так и сохранится в PDF</div>
+      <div class="paper-wrap">
+        <div class="page" id="page"><div class="inv" id="inv"></div></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- модалка «Мои реквизиты» -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h3>Мои реквизиты</h3>
+    <p class="msub">Заполняются один раз. Хранятся только в этом браузере — на сервер ничего не отправляется.</p>
+    <label class="f"><span>Имя / Название</span><input id="m_legalName"></label>
+    <label class="f"><span>Юридический адрес</span><input id="m_address"></label>
+    <div class="row2">
+      <label class="f"><span>Reģ. Nr.</span><input id="m_regNr"></label>
+      <label class="f"><span>PVN Nr. (или -)</span><input id="m_vatNr"></label>
+    </div>
+    <label class="f"><span>IBAN</span><input id="m_iban"></label>
+    <div class="row2">
+      <label class="f"><span>Банк</span><input id="m_bank"></label>
+      <label class="f"><span>SWIFT</span><input id="m_swift"></label>
+    </div>
+    <div class="row2">
+      <label class="f"><span>Срок оплаты, дней</span><input id="m_dueDays" inputmode="numeric"></label>
+      <label class="f"><span>Стартовый номер счёта</span><input id="m_nextNumber" inputmode="numeric"></label>
+    </div>
+    <label class="f"><span>Текст внизу счёта</span><input id="m_footer"></label>
+    <div class="row2" style="margin-top:8px">
+      <button class="btn ghost" id="modalCancel">Отмена</button>
+      <button class="btn primary" id="modalSave">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- локальные данные пользователя: НЕ в git, на GitHub не попадает (см. .gitignore).
+     Если файла нет (напр. на публичной странице) — приложение просто спросит реквизиты при первом запуске. -->
+<script src="my-data.local.js"></script>
+
+<script>
+/* ============================================================
+   FLORA Rēķini — персональный генератор счетов.
+   Всё в браузере (localStorage). Ничего не уходит в сеть.
+   ============================================================ */
+
+const SEED = (typeof window!=='undefined' && window.FLORA_SEED) || {};
+const SEED_CLIENTS = (typeof window!=='undefined' && window.FLORA_SEED_CLIENTS) || null;
+
+const DEFAULT_PROFILE = Object.assign({
+  legalName:'', address:'', regNr:'', vatNr:'-',
+  iban:'', bank:'', swift:'',
+  footer:'Rēķins ir sagatavots elektroniski un derīgs bez paraksta.',
+  logo:'', dueDays:7, nextNumber:1,
+  accent:'#E8622C', paper:'#ffffff', texture:'none'
+}, SEED);
+const DEFAULT_CLIENTS = SEED_CLIENTS || [];
+
+const store = {
+  profile(){ return Object.assign({}, DEFAULT_PROFILE, JSON.parse(localStorage.getItem('flora_profile')||'{}')); },
+  saveProfile(p){ localStorage.setItem('flora_profile', JSON.stringify(p)); },
+  clients(){ const c=localStorage.getItem('flora_clients'); return c?JSON.parse(c):DEFAULT_CLIENTS.slice(); },
+  saveClients(l){ localStorage.setItem('flora_clients', JSON.stringify(l)); }
+};
+
+/* латышская сумма прописью (проверено на 170/200/500) */
+const L_ONES=['nulle','viens','divi','trīs','četri','pieci','seši','septiņi','astoņi','deviņi'];
+const L_TEENS=['desmit','vienpadsmit','divpadsmit','trīspadsmit','četrpadsmit','piecpadsmit','sešpadsmit','septiņpadsmit','astoņpadsmit','deviņpadsmit'];
+const L_TENS=['','','divdesmit','trīsdesmit','četrdesmit','piecdesmit','sešdesmit','septiņdesmit','astoņdesmit','deviņdesmit'];
+function lvBelow100(n){ if(n===0)return''; if(n<10)return L_ONES[n]; if(n<20)return L_TEENS[n-10];
+  const t=Math.floor(n/10),u=n%10; return L_TENS[t]+(u?' '+L_ONES[u]:''); }
+function lvBelow1000(n){ const h=Math.floor(n/100),r=n%100,p=[];
+  if(h===1)p.push('viens simts'); else if(h>1)p.push(L_ONES[h]+' simti');
+  if(r)p.push(lvBelow100(r)); return p.join(' '); }
+function lvWords(n){ n=Math.floor(n); if(n===0)return'nulle';
+  const th=Math.floor(n/1000),r=n%1000,p=[];
+  if(th===1)p.push('viens tūkstotis'); else if(th>1)p.push(lvBelow1000(th)+' tūkstoši');
+  if(r)p.push(lvBelow1000(r)); return p.join(' '); }
+function amountInWords(total){ const e=Math.floor(total+1e-9),c=Math.round((total-e)*100);
+  let w=lvWords(e); w=w.charAt(0).toUpperCase()+w.slice(1);
+  return `${w} eiro, ${String(c).padStart(2,'0')} centi`; }
+
+/* форматирование */
+function money(n){ const [i,d]=Number(n).toFixed(2).split('.'); return i.replace(/\B(?=(\d{3})+(?!\d))/g,' ')+','+d; }
+function fmtDate(iso){ if(!iso)return''; const [y,m,d]=iso.split('-'); return `${d}.${m}.${y}`; }
+function todayISO(){ const d=new Date(); const o=d.getTimezoneOffset(); return new Date(d-o*60000).toISOString().slice(0,10); }
+function addDaysISO(iso,days){ const d=new Date(iso); d.setDate(d.getDate()+Number(days)); return d.toISOString().slice(0,10); }
+function eomISO(iso){ const d=new Date(iso); return new Date(d.getFullYear(),d.getMonth()+1,0).toISOString().slice(0,10); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* состояние */
+let P = store.profile();
+let CL = store.clients();
+const c0 = CL[0] || {name:'',regNr:'',vatNr:'-',addr:'',defDesc:''};
+const state = {
+  number:String(P.nextNumber), issueDate:todayISO(), dueDate:addDaysISO(todayISO(),P.dueDays),
+  cName:c0.name, cReg:c0.regNr, cVat:c0.vatNr, cAddr:c0.addr,
+  desc:c0.defDesc||'', price:'', qty:'1', unit:'gab.'
+};
+
+function calc(){
+  const price=parseFloat((state.price||'0').replace(',','.'))||0;
+  const qty=parseFloat((state.qty||'0').replace(',','.'))||0;
+  const line=+(price*qty).toFixed(2);
+  return {price,qty,line,total:line};
+}
+
+function render(){
+  const {price,qty,line,total}=calc();
+  const logoHtml = P.logo ? `<img src="${P.logo}" alt="logo">`
+    : `<div class="mark"></div><div><div class="name">FLORA</div><div class="sub">Photo · Video · Audio</div></div>`;
+  document.getElementById('inv').innerHTML = `
+    <div class="top">
+      <div class="logo">${logoHtml}</div>
+      <div class="docmeta">
+        <div class="title">RĒĶINS Nr. ${esc(state.number)}</div>
+        <div class="mrow"><span class="k">Rēķina datums</span><span class="v">${fmtDate(state.issueDate)}</span></div>
+        <div class="mrow"><span class="k">Apmaksāt līdz</span><span class="v">${fmtDate(state.dueDate)}</span></div>
+      </div>
+    </div>
+    <div class="parties">
+      <div class="party">
+        <div class="plabel">Pakalpojuma sniedzējs</div>
+        <div class="pname">${esc(P.legalName)}</div>
+        <div class="kv">
+          <span class="k">Adrese</span><span class="v">${esc(P.address)}</span>
+          <span class="k">Reģ. Nr.</span><span class="v">${esc(P.regNr)}</span>
+          <span class="k">PVN Nr.</span><span class="v">${esc(P.vatNr)}</span>
+          <span class="k">Konts</span><span class="v">${esc(P.iban)}</span>
+          <span class="k">Banka</span><span class="v">${esc(P.bank)}${P.swift?' · '+esc(P.swift):''}</span>
+          <span class="k">Pamatojums</span><span class="v">RĒĶINS Nr. ${esc(state.number)}</span>
+        </div>
+      </div>
+      <div class="party">
+        <div class="plabel">Pakalpojuma saņēmējs</div>
+        <div class="pname">${esc(state.cName)}</div>
+        <div class="kv">
+          <span class="k">Adrese</span><span class="v">${esc(state.cAddr)}</span>
+          <span class="k">Reģ. Nr.</span><span class="v">${esc(state.cReg)}</span>
+          <span class="k">PVN Nr.</span><span class="v">${esc(state.cVat||'-')}</span>
+        </div>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th class="l">Apraksts</th><th>Mērv.</th><th>Cena / vien. €</th><th>Daudzums</th><th>Summa EUR</th></tr></thead>
+      <tbody><tr>
+        <td class="l"><span class="desc">${esc(state.desc)||'&nbsp;'}</span></td>
+        <td>${esc(state.unit)}</td><td>${money(price)}</td><td>${esc(state.qty||'0')}</td><td>${money(line)}</td>
+      </tr></tbody>
+    </table>
+    <div class="foot">
+      <div class="words"><div class="wl">Summa vārdiem</div><div class="wv">${amountInWords(total)}</div></div>
+      <div class="totals">
+        <div class="tr"><span class="tk">Kopsumma bez PVN EUR</span><span class="tv">${money(total)}</span></div>
+        <div class="tr"><span class="tk">PVN kopsumma EUR</span><span class="tv">—</span></div>
+        <div class="tr grand"><span class="tk">Pavisam apmaksai</span><span class="tv">${money(total)} €</span></div>
+      </div>
+    </div>
+    <div class="note">${esc(P.footer)}</div>`;
+}
+
+/* оформление */
+const ACCENTS=['#E8622C','#D6337E','#C79A3B','#2E6E8E','#3B7A57','#8A4FBE','#3a3a40'];
+const PAPERS=[['Белая','#ffffff'],['Кремовая','#FBF7EF'],['Песок','#F6F0E6'],['Серая','#F4F5F7'],['Мятная','#EFF5F1']];
+const TEXTURES=[['Нет','none'],['Точки','dots'],['Мягкий свет','glow'],['Лепестки','petals']];
+function petalsSVG(color){
+  let petals=''; for(let i=0;i<6;i++){ petals+=`<ellipse cx='0' cy='-34' rx='12' ry='30' transform='rotate(${i*60})'/>`; }
+  const svg=`<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'>`
+    +`<g transform='translate(110,110)' fill='${color}' fill-opacity='0.06'>${petals}`
+    +`<circle r='9' fill='${color}' fill-opacity='0.10'/></g></svg>`;
+  return "url(\"data:image/svg+xml,"+encodeURIComponent(svg)+"\")";
+}
+function applyTheme(){
+  document.documentElement.style.setProperty('--accent', P.accent||'#E8622C');
+  const page=document.getElementById('page');
+  page.style.backgroundColor = P.paper||'#ffffff';
+  const t=P.texture||'none';
+  if(t==='none'){ page.style.backgroundImage='none'; }
+  else if(t==='dots'){
+    page.style.backgroundImage='radial-gradient(circle, rgba(0,0,0,0.045) 1px, transparent 1.4px)';
+    page.style.backgroundSize='18px 18px'; page.style.backgroundRepeat='repeat'; page.style.backgroundPosition='0 0';
+  } else if(t==='glow'){
+    const a=P.accent||'#E8622C';
+    page.style.backgroundImage=`radial-gradient(120% 60% at 100% 0%, ${a}14, transparent 45%), radial-gradient(120% 60% at 0% 100%, ${a}0f, transparent 45%)`;
+    page.style.backgroundRepeat='no-repeat'; page.style.backgroundPosition='center'; page.style.backgroundSize='auto';
+  } else if(t==='petals'){
+    const img=petalsSVG(P.accent||'#E8622C');
+    page.style.backgroundImage=img+','+img;
+    page.style.backgroundRepeat='no-repeat,no-repeat';
+    page.style.backgroundPosition='top -40px right -40px, bottom -40px left -40px';
+    page.style.backgroundSize='210px,210px';
+  }
+  document.querySelectorAll('#accentSw .sw').forEach(s=>s.classList.toggle('active',s.dataset.c===P.accent));
+  document.querySelectorAll('#paperSw .pw').forEach(s=>s.classList.toggle('active',s.dataset.c===P.paper));
+  document.querySelectorAll('#textureSw .pw').forEach(s=>s.classList.toggle('active',s.dataset.t===P.texture));
+}
+function buildThemeUI(){
+  const asw=document.getElementById('accentSw');
+  asw.innerHTML=ACCENTS.map(c=>`<div class="sw" data-c="${c}" style="background:${c}"></div>`).join('');
+  asw.querySelectorAll('.sw').forEach(s=>s.addEventListener('click',()=>{P.accent=s.dataset.c;store.saveProfile(P);applyTheme();render();}));
+  document.getElementById('accentCustom').value=P.accent||'#E8622C';
+  document.getElementById('accentCustom').addEventListener('input',e=>{P.accent=e.target.value;store.saveProfile(P);applyTheme();render();});
+  const psw=document.getElementById('paperSw');
+  psw.innerHTML=PAPERS.map(([n,c])=>`<div class="pw" data-c="${c}" style="background:${c}">${n}</div>`).join('');
+  psw.querySelectorAll('.pw').forEach(s=>s.addEventListener('click',()=>{P.paper=s.dataset.c;store.saveProfile(P);applyTheme();}));
+  const tsw=document.getElementById('textureSw');
+  tsw.innerHTML=TEXTURES.map(([n,t])=>`<div class="pw" data-t="${t}">${n}</div>`).join('');
+  tsw.querySelectorAll('.pw').forEach(s=>s.addEventListener('click',()=>{P.texture=s.dataset.t;store.saveProfile(P);applyTheme();}));
+}
+
+/* XML e-rēķins (черновик EN 16931 / Peppol BIS 3.0) */
+const UNIT_MAP={'gab.':'H87','reize':'C62','h':'HUR','diena':'DAY','komplekts':'SET'};
+function xE(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c])); }
+function buildUBL(){
+  const {price,qty,line,total}=calc();
+  const unit=UNIT_MAP[state.unit]||'H87';
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!-- ЧЕРНОВИК e-rēķins. Базовый EN 16931 / Peppol BIS Billing 3.0.
+     Обязателен для B2B в Латвии с 01.01.2028. Перед реальной отправкой
+     проверить: код схемы EndpointID и категорию PVN (E / O) для неплательщика. -->
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+  xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+  xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0</cbc:CustomizationID>
+  <cbc:ProfileID>urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</cbc:ProfileID>
+  <cbc:ID>${xE(state.number)}</cbc:ID>
+  <cbc:IssueDate>${xE(state.issueDate)}</cbc:IssueDate>
+  <cbc:DueDate>${xE(state.dueDate)}</cbc:DueDate>
+  <cbc:InvoiceTypeCode>380</cbc:InvoiceTypeCode>
+  <cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode>
+  <cbc:BuyerReference>${xE(state.cName)}</cbc:BuyerReference>
+  <cac:AccountingSupplierParty><cac:Party>
+    <cbc:EndpointID schemeID="0218">${xE(P.regNr)}</cbc:EndpointID>
+    <cac:PostalAddress><cbc:StreetName>${xE(P.address)}</cbc:StreetName>
+      <cac:Country><cbc:IdentificationCode>LV</cbc:IdentificationCode></cac:Country></cac:PostalAddress>
+    <cac:PartyLegalEntity><cbc:RegistrationName>${xE(P.legalName)}</cbc:RegistrationName>
+      <cbc:CompanyID>${xE(P.regNr)}</cbc:CompanyID></cac:PartyLegalEntity>
+  </cac:Party></cac:AccountingSupplierParty>
+  <cac:AccountingCustomerParty><cac:Party>
+    <cbc:EndpointID schemeID="0218">${xE(state.cReg)}</cbc:EndpointID>
+    <cac:PostalAddress><cbc:StreetName>${xE(state.cAddr)}</cbc:StreetName>
+      <cac:Country><cbc:IdentificationCode>LV</cbc:IdentificationCode></cac:Country></cac:PostalAddress>
+    <cac:PartyLegalEntity><cbc:RegistrationName>${xE(state.cName)}</cbc:RegistrationName>
+      <cbc:CompanyID>${xE(state.cReg)}</cbc:CompanyID></cac:PartyLegalEntity>
+  </cac:Party></cac:AccountingCustomerParty>
+  <cac:PaymentMeans><cbc:PaymentMeansCode>30</cbc:PaymentMeansCode>
+    <cac:PayeeFinancialAccount><cbc:ID>${xE(P.iban)}</cbc:ID>
+      <cac:FinancialInstitutionBranch><cbc:ID>${xE(P.swift)}</cbc:ID></cac:FinancialInstitutionBranch>
+    </cac:PayeeFinancialAccount></cac:PaymentMeans>
+  <cac:TaxTotal><cbc:TaxAmount currencyID="EUR">0.00</cbc:TaxAmount>
+    <cac:TaxSubtotal><cbc:TaxableAmount currencyID="EUR">${total.toFixed(2)}</cbc:TaxableAmount>
+      <cbc:TaxAmount currencyID="EUR">0.00</cbc:TaxAmount>
+      <cac:TaxCategory><cbc:ID>E</cbc:ID><cbc:Percent>0</cbc:Percent>
+        <cbc:TaxExemptionReason>Nav reģistrēts PVN maksātājs</cbc:TaxExemptionReason>
+        <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:TaxCategory>
+    </cac:TaxSubtotal></cac:TaxTotal>
+  <cac:LegalMonetaryTotal>
+    <cbc:LineExtensionAmount currencyID="EUR">${total.toFixed(2)}</cbc:LineExtensionAmount>
+    <cbc:TaxExclusiveAmount currencyID="EUR">${total.toFixed(2)}</cbc:TaxExclusiveAmount>
+    <cbc:TaxInclusiveAmount currencyID="EUR">${total.toFixed(2)}</cbc:TaxInclusiveAmount>
+    <cbc:PayableAmount currencyID="EUR">${total.toFixed(2)}</cbc:PayableAmount>
+  </cac:LegalMonetaryTotal>
+  <cac:InvoiceLine><cbc:ID>1</cbc:ID>
+    <cbc:InvoicedQuantity unitCode="${unit}">${qty}</cbc:InvoicedQuantity>
+    <cbc:LineExtensionAmount currencyID="EUR">${line.toFixed(2)}</cbc:LineExtensionAmount>
+    <cac:Item><cbc:Name>${xE(state.desc)}</cbc:Name>
+      <cac:ClassifiedTaxCategory><cbc:ID>E</cbc:ID><cbc:Percent>0</cbc:Percent>
+        <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:ClassifiedTaxCategory></cac:Item>
+    <cac:Price><cbc:PriceAmount currencyID="EUR">${price.toFixed(2)}</cbc:PriceAmount></cac:Price>
+  </cac:InvoiceLine>
+</Invoice>`;
+}
+
+function download(filename,text,mime){
+  const blob=new Blob([text],{type:mime||'text/plain;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
+
+/* привязка полей */
+function bind(id,key){ const el=document.getElementById(id);
+  el.addEventListener('input',()=>{ state[key]=el.value; render(); flashSaved(); }); }
+function setVal(id,v){ document.getElementById(id).value=v; }
+let savedTimer;
+function flashSaved(){ const s=document.getElementById('autosave'); s.textContent='сохранено ✓';
+  clearTimeout(savedTimer); savedTimer=setTimeout(()=>s.textContent='сохранено',1200); }
+
+function initClientPicker(sel){
+  const p=document.getElementById('clientPick');
+  p.innerHTML=CL.map((c,i)=>`<option value="${i}">${esc(c.name)}</option>`).join('')+`<option value="new">— новый клиент —</option>`;
+  p.value = (sel!=null && CL.length) ? sel : (CL.length? '0':'new');
+}
+document.getElementById('clientPick').addEventListener('change',e=>{
+  const v=e.target.value;
+  if(v==='new'){ state.cName='';state.cReg='';state.cVat='-';state.cAddr=''; }
+  else{ const c=CL[+v]; state.cName=c.name;state.cReg=c.regNr;state.cVat=c.vatNr;state.cAddr=c.addr;
+        if(c.defDesc){state.desc=c.defDesc;setVal('lDesc',c.defDesc);} }
+  setVal('cName',state.cName);setVal('cReg',state.cReg);setVal('cVat',state.cVat);setVal('cAddr',state.cAddr);
+  render();
+});
+
+bind('number','number'); bind('issueDate','issueDate'); bind('dueDate','dueDate');
+bind('cName','cName'); bind('cReg','cReg'); bind('cVat','cVat'); bind('cAddr','cAddr');
+bind('lDesc','desc'); bind('lPrice','price'); bind('lQty','qty'); bind('lUnit','unit');
+
+document.querySelectorAll('.chip[data-due]').forEach(c=>c.addEventListener('click',()=>{
+  const v=c.dataset.due; state.dueDate=v==='eom'?eomISO(state.issueDate):addDaysISO(state.issueDate,v);
+  setVal('dueDate',state.dueDate); render(); }));
+document.querySelectorAll('.chip[data-desc]').forEach(c=>c.addEventListener('click',()=>{
+  state.desc=c.dataset.desc; setVal('lDesc',state.desc); render(); }));
+
+document.getElementById('saveClient').addEventListener('click',()=>{
+  if(!state.cName.trim()){ alert('Заполни название клиента'); return; }
+  CL.push({name:state.cName,regNr:state.cReg,vatNr:state.cVat,addr:state.cAddr,defDesc:state.desc});
+  store.saveClients(CL); initClientPicker(CL.length-1); alert('Клиент сохранён в избранное');
+});
+document.getElementById('delClient').addEventListener('click',()=>{
+  const p=document.getElementById('clientPick'); if(p.value==='new'||!CL.length) return;
+  if(!confirm('Удалить '+CL[+p.value].name+' из избранного?')) return;
+  CL.splice(+p.value,1); store.saveClients(CL); initClientPicker(0); p.dispatchEvent(new Event('change'));
+});
+
+document.getElementById('logoBtn').addEventListener('click',()=>document.getElementById('logoFile').click());
+document.getElementById('logoFile').addEventListener('change',e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ P.logo=r.result; store.saveProfile(P); refreshLogoUI(); render(); };
+  r.readAsDataURL(f);
+});
+document.getElementById('logoDel').addEventListener('click',()=>{
+  P.logo=''; store.saveProfile(P); document.getElementById('logoFile').value=''; refreshLogoUI(); render();
+});
+function refreshLogoUI(){
+  const prev=document.getElementById('logoPrev'), del=document.getElementById('logoDel'), btn=document.getElementById('logoBtn');
+  if(P.logo){ prev.innerHTML=`<img src="${P.logo}">`; del.style.display=''; btn.textContent='Заменить'; }
+  else{ prev.innerHTML='<span style="font-size:9px;color:#bbb">FLORA</span>'; del.style.display='none'; btn.textContent='Загрузить'; }
+}
+
+/* модалка реквизитов */
+function mv(id){ return document.getElementById('m_'+id).value.trim(); }
+function openProfileModal(firstRun){
+  ['legalName','address','regNr','vatNr','iban','bank','swift','footer','dueDays','nextNumber'].forEach(k=>{
+    document.getElementById('m_'+k).value = (P[k]!=null?P[k]:'');
+  });
+  document.getElementById('modalCancel').style.display = firstRun ? 'none' : '';
+  document.getElementById('modalBg').style.display='flex';
+}
+function closeModal(){ document.getElementById('modalBg').style.display='none'; }
+document.getElementById('modalSave').addEventListener('click',()=>{
+  P.legalName=mv('legalName'); P.address=mv('address'); P.regNr=mv('regNr'); P.vatNr=mv('vatNr')||'-';
+  P.iban=mv('iban'); P.bank=mv('bank'); P.swift=mv('swift'); P.footer=mv('footer');
+  P.dueDays=parseInt(mv('dueDays'),10)||7;
+  const nn=parseInt(mv('nextNumber'),10);
+  if(!isNaN(nn)){ P.nextNumber=nn; state.number=String(nn); setVal('number',state.number); }
+  store.saveProfile(P); closeModal(); render();
+});
+document.getElementById('modalCancel').addEventListener('click',closeModal);
+document.getElementById('editProfile').addEventListener('click',e=>{ e.preventDefault(); openProfileModal(false); });
+
+/* PDF: прямое скачивание, без диалога печати */
+document.getElementById('pdfBtn').addEventListener('click',async()=>{
+  const btn=document.getElementById('pdfBtn'); const old=btn.textContent; btn.textContent='Готовлю PDF…'; btn.disabled=true;
+  const page=document.getElementById('page'); const prevScale=page.style.getPropertyValue('--scale');
+  page.style.setProperty('--scale','1');
+  try{ if(document.fonts&&document.fonts.ready) await document.fonts.ready; }catch(e){}
+  try{
+    await html2pdf().set({
+      margin:0, filename:`Rekins_${state.number}.pdf`,
+      image:{type:'jpeg',quality:0.98},
+      html2canvas:{scale:3,useCORS:true,backgroundColor:P.paper||'#ffffff',windowWidth:page.scrollWidth},
+      jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
+    }).from(page).save();
+  }catch(err){ alert('Не удалось собрать PDF: '+err+'\nМожно воспользоваться кнопкой «Печать» → «Сохранить как PDF».'); }
+  page.style.setProperty('--scale',prevScale||''); btn.textContent=old; btn.disabled=false;
+});
+document.getElementById('xmlBtn').addEventListener('click',()=>{
+  download(`Rekins_${state.number}.xml`, buildUBL(), 'application/xml;charset=utf-8');
+});
+document.getElementById('printBtn').addEventListener('click',()=>{
+  const page=document.getElementById('page'); page.style.setProperty('--scale','1');
+  window.print(); setTimeout(()=>page.style.removeProperty('--scale'),300);
+});
+document.getElementById('newBtn').addEventListener('click',()=>{
+  const used=parseInt(state.number,10);
+  if(!isNaN(used)){ P.nextNumber=used+1; store.saveProfile(P); }
+  state.number=String(P.nextNumber);
+  state.issueDate=todayISO(); state.dueDate=addDaysISO(state.issueDate,P.dueDays);
+  state.price=''; state.qty='1';
+  setVal('number',state.number);setVal('issueDate',state.issueDate);setVal('dueDate',state.dueDate);
+  setVal('lPrice','');setVal('lQty','1'); render();
+});
+
+/* старт */
+function fillForm(){
+  setVal('number',state.number);setVal('issueDate',state.issueDate);setVal('dueDate',state.dueDate);
+  setVal('cName',state.cName);setVal('cReg',state.cReg);setVal('cVat',state.cVat);setVal('cAddr',state.cAddr);
+  setVal('lDesc',state.desc);setVal('lPrice',state.price);setVal('lQty',state.qty);setVal('lUnit',state.unit);
+}
+initClientPicker(0);
+buildThemeUI();
+fillForm();
+refreshLogoUI();
+applyTheme();
+render();
+
+/* первый запуск: если реквизиты ещё не заданы — предложить заполнить */
+if(!localStorage.getItem('flora_profile') && !P.legalName){
+  openProfileModal(true);
+}
+</script>
+</body>
+</html>
