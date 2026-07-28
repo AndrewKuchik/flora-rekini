@@ -40,8 +40,11 @@
   .row3{display:grid;grid-template-columns:1.4fr .8fr .8fr;gap:10px}
 
   .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
-  .chip{font-size:12px;padding:5px 10px;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer;color:var(--muted)}
+  .chip{font-size:12px;padding:5px 10px;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer;color:var(--muted);display:inline-flex;align-items:center}
   .chip:hover{border-color:var(--accent);color:var(--accent)}
+  .chip .x{margin-left:7px;color:#c4c4cc;font-weight:700;font-size:13px;line-height:1}
+  .chip .x:hover{color:#e0402e}
+  .chip.add{color:var(--accent);border-style:dashed}
 
   .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;
     font-family:var(--font);font-size:14px;font-weight:600;padding:12px 14px;border-radius:11px;border:0;cursor:pointer}
@@ -183,12 +186,8 @@
 
     <div class="group">
       <p class="gt">Услуга</p>
-      <label class="f"><span>Описание</span><textarea id="lDesc"></textarea>
-        <div class="chips">
-          <span class="chip" data-desc="Foto un video pakalpojumi">Foto/video</span>
-          <span class="chip" data-desc="Video filmēšana">Video</span>
-          <span class="chip" data-desc="skaņu ieraksts">Skaņu ieraksts</span>
-        </div>
+      <label class="f"><span>Описание (пиши что угодно; кнопки ниже — быстрые заготовки)</span><textarea id="lDesc"></textarea>
+        <div class="chips" id="svcChips"></div>
       </label>
       <div class="row3">
         <label class="f"><span>Цена €</span><input id="lPrice" inputmode="decimal"></label>
@@ -293,11 +292,20 @@ const DEFAULT_PROFILE = Object.assign({
 }, SEED);
 const DEFAULT_CLIENTS = SEED_CLIENTS || [];
 
+const SEED_SERVICES = (typeof window!=='undefined' && window.FLORA_SEED_SERVICES) || null;
+const DEFAULT_SERVICES = SEED_SERVICES || [
+  {desc:'Foto un video pakalpojumi', unit:'gab.'},
+  {desc:'Video filmēšana', unit:'gab.'},
+  {desc:'skaņu ieraksts', unit:'gab.'}
+];
+
 const store = {
   profile(){ return Object.assign({}, DEFAULT_PROFILE, JSON.parse(localStorage.getItem('flora_profile')||'{}')); },
   saveProfile(p){ localStorage.setItem('flora_profile', JSON.stringify(p)); },
   clients(){ const c=localStorage.getItem('flora_clients'); return c?JSON.parse(c):DEFAULT_CLIENTS.slice(); },
-  saveClients(l){ localStorage.setItem('flora_clients', JSON.stringify(l)); }
+  saveClients(l){ localStorage.setItem('flora_clients', JSON.stringify(l)); },
+  services(){ const s=localStorage.getItem('flora_services'); return s?JSON.parse(s):DEFAULT_SERVICES.slice(); },
+  saveServices(l){ localStorage.setItem('flora_services', JSON.stringify(l)); }
 };
 
 /* латышская сумма прописью (проверено на 170/200/500) */
@@ -328,6 +336,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;',
 /* состояние */
 let P = store.profile();
 let CL = store.clients();
+let SV = store.services();
 const c0 = CL[0] || {name:'',regNr:'',vatNr:'-',addr:'',defDesc:''};
 const state = {
   number:String(P.nextNumber), issueDate:todayISO(), dueDate:addDaysISO(todayISO(),P.dueDays),
@@ -562,8 +571,25 @@ bind('lDesc','desc'); bind('lPrice','price'); bind('lQty','qty'); bind('lUnit','
 document.querySelectorAll('.chip[data-due]').forEach(c=>c.addEventListener('click',()=>{
   const v=c.dataset.due; state.dueDate=v==='eom'?eomISO(state.issueDate):addDaysISO(state.issueDate,v);
   setVal('dueDate',state.dueDate); render(); }));
-document.querySelectorAll('.chip[data-desc]').forEach(c=>c.addEventListener('click',()=>{
-  state.desc=c.dataset.desc; setVal('lDesc',state.desc); render(); }));
+/* редактируемые заготовки услуг */
+function svcShort(s){ s=String(s||''); return s.length>26 ? s.slice(0,24)+'…' : s; }
+function buildSvcChips(){
+  const c=document.getElementById('svcChips');
+  c.innerHTML = SV.map((s,i)=>`<span class="chip svc" data-i="${i}" title="${esc(s.desc)}">${esc(svcShort(s.desc))}<b class="x" data-del="${i}">×</b></span>`).join('')
+    + `<span class="chip add" id="svcAdd">＋ сохранить текущую</span>`;
+}
+document.getElementById('svcChips').addEventListener('click',e=>{
+  const del=e.target.closest('[data-del]');
+  if(del){ SV.splice(+del.dataset.del,1); store.saveServices(SV); buildSvcChips(); return; }
+  if(e.target.closest('#svcAdd')){
+    const d=(state.desc||'').trim(); if(!d){ alert('Сначала впиши описание в поле выше'); return; }
+    if(!SV.some(s=>s.desc===d)){ SV.push({desc:d,unit:state.unit}); store.saveServices(SV); buildSvcChips(); }
+    return;
+  }
+  const chip=e.target.closest('.svc');
+  if(chip){ const s=SV[+chip.dataset.i]; state.desc=s.desc; setVal('lDesc',s.desc);
+    if(s.unit){ state.unit=s.unit; setVal('lUnit',s.unit); } render(); }
+});
 
 document.getElementById('saveClient').addEventListener('click',()=>{
   if(!state.cName.trim()){ alert('Заполни название клиента'); return; }
@@ -662,6 +688,7 @@ function fillForm(){
   setVal('lDesc',state.desc);setVal('lPrice',state.price);setVal('lQty',state.qty);setVal('lUnit',state.unit);
 }
 initClientPicker(0);
+buildSvcChips();
 buildThemeUI();
 fillForm();
 refreshLogoUI();
