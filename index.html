@@ -205,6 +205,11 @@
         <label class="f"><span>PVN Nr.</span><input id="cVat"></label>
       </div>
       <label class="f"><span>Адрес</span><input id="cAddr"></label>
+      <label class="f"><span>IBAN</span><input id="cIban"></label>
+      <div class="row2">
+        <label class="f"><span>Банк</span><input id="cBank"></label>
+        <label class="f"><span>SWIFT</span><input id="cSwift"></label>
+      </div>
       <div class="row2">
         <button class="btn ghost sm" id="saveClient">＋ Сохранить клиента</button>
         <button class="btn ghost sm" id="delClient">🗑 Удалить</button>
@@ -365,10 +370,11 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;',
 let P = store.profile();
 let CL = store.clients();
 let SV = store.services();
-const c0 = CL[0] || {name:'',regNr:'',vatNr:'-',addr:'',defDesc:''};
+const c0 = CL[0] || {name:'',regNr:'',vatNr:'-',addr:'',iban:'',bank:'',swift:'',defDesc:''};
 const state = {
   number:String(P.nextNumber), issueDate:todayISO(), dueDate:addDaysISO(todayISO(),P.dueDays),
   cName:c0.name, cReg:c0.regNr, cVat:c0.vatNr, cAddr:c0.addr,
+  cIban:c0.iban||'', cBank:c0.bank||'', cSwift:c0.swift||'',
   desc:c0.defDesc||'', price:'', qty:'1', unit:'gab.'
 };
 
@@ -434,6 +440,8 @@ function render(){
           <span class="k">Adrese</span><span class="v">${esc(P.address)}</span>
           <span class="k">Reģ. Nr.</span><span class="v">${esc(P.regNr)}</span>
           <span class="k">PVN Nr.</span><span class="v">${esc(P.vatNr)}</span>
+          ${P.iban?`<span class="k">Konts (IBAN)</span><span class="v">${esc(P.iban)}</span>`:''}
+          ${P.bank?`<span class="k">Banka</span><span class="v">${esc(P.bank)}${P.swift?' · SWIFT '+esc(P.swift):''}</span>`:''}
         </div>
       </div>
       <div class="party">
@@ -443,6 +451,8 @@ function render(){
           <span class="k">Adrese</span><span class="v">${esc(state.cAddr)}</span>
           <span class="k">Reģ. Nr.</span><span class="v">${esc(state.cReg)}</span>
           <span class="k">PVN Nr.</span><span class="v">${esc(state.cVat||'-')}</span>
+          ${state.cIban?`<span class="k">Konts (IBAN)</span><span class="v">${esc(state.cIban)}</span>`:''}
+          ${state.cBank?`<span class="k">Banka</span><span class="v">${esc(state.cBank)}${state.cSwift?' · SWIFT '+esc(state.cSwift):''}</span>`:''}
         </div>
       </div>
     </div>
@@ -628,15 +638,21 @@ function initClientPicker(sel){
 }
 document.getElementById('clientPick').addEventListener('change',e=>{
   const v=e.target.value;
-  if(v==='new'){ state.cName='';state.cReg='';state.cVat='-';state.cAddr=''; }
+  if(v==='new'){
+    state.cName='';state.cReg='';state.cVat='-';state.cAddr='';
+    state.cIban='';state.cBank='';state.cSwift='';
+  }
   else{ const c=CL[+v]; state.cName=c.name;state.cReg=c.regNr;state.cVat=c.vatNr;state.cAddr=c.addr;
+        state.cIban=c.iban||'';state.cBank=c.bank||'';state.cSwift=c.swift||'';
         if(c.defDesc){state.desc=c.defDesc;setVal('lDesc',c.defDesc);} }
   setVal('cName',state.cName);setVal('cReg',state.cReg);setVal('cVat',state.cVat);setVal('cAddr',state.cAddr);
+  setVal('cIban',state.cIban);setVal('cBank',state.cBank);setVal('cSwift',state.cSwift);
   render();
 });
 
 bind('number','number'); bind('issueDate','issueDate'); bind('dueDate','dueDate');
 bind('cName','cName'); bind('cReg','cReg'); bind('cVat','cVat'); bind('cAddr','cAddr');
+bind('cIban','cIban'); bind('cBank','cBank'); bind('cSwift','cSwift');
 bind('lDesc','desc'); bind('lPrice','price'); bind('lQty','qty'); bind('lUnit','unit');
 
 document.querySelectorAll('.chip[data-due]').forEach(c=>c.addEventListener('click',()=>{
@@ -664,7 +680,10 @@ document.getElementById('svcChips').addEventListener('click',e=>{
 
 document.getElementById('saveClient').addEventListener('click',()=>{
   if(!state.cName.trim()){ alert('Заполни название клиента'); return; }
-  CL.push({name:state.cName,regNr:state.cReg,vatNr:state.cVat,addr:state.cAddr,defDesc:state.desc});
+  CL.push({
+    name:state.cName, regNr:state.cReg, vatNr:state.cVat, addr:state.cAddr,
+    iban:state.cIban, bank:state.cBank, swift:state.cSwift, defDesc:state.desc
+  });
   store.saveClients(CL); initClientPicker(CL.length-1); alert('Клиент сохранён в избранное');
 });
 document.getElementById('delClient').addEventListener('click',()=>{
@@ -803,6 +822,7 @@ document.getElementById('newBtn').addEventListener('click',()=>{
 function fillForm(){
   setVal('number',state.number);setVal('issueDate',state.issueDate);setVal('dueDate',state.dueDate);
   setVal('cName',state.cName);setVal('cReg',state.cReg);setVal('cVat',state.cVat);setVal('cAddr',state.cAddr);
+  setVal('cIban',state.cIban);setVal('cBank',state.cBank);setVal('cSwift',state.cSwift);
   setVal('lDesc',state.desc);setVal('lPrice',state.price);setVal('lQty',state.qty);setVal('lUnit',state.unit);
 }
 initClientPicker(0);
