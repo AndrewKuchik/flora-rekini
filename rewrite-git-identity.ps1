@@ -60,7 +60,7 @@ git config user.email $NewEmail
 if ($Push) {
   $remote = git remote get-url origin
   $branch = git branch --show-current
-  if (-not $branch) { throw 'Не удалось определить текущую ветку.' }
+  if (-not $branch) { throw 'Could not determine the current branch.' }
   Write-Host "Pushing rewritten branch '$branch' to $remote..."
   git push --force-with-lease origin "$branch"
   if ($LASTEXITCODE -ne 0) {
