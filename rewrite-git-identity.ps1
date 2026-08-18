@@ -10,17 +10,17 @@ $ErrorActionPreference = 'Stop'
 
 git rev-parse --show-toplevel *> $null
 if ($LASTEXITCODE -ne 0) {
-  throw 'Запусти скрипт внутри Git-репозитория.'
+  throw 'Run this script inside a Git repository.'
 }
 
 $status = git status --porcelain
 if ($status) {
-  throw 'Рабочая папка не пуста. Сначала закоммить или временно убери изменения.'
+  throw 'Working tree is not clean. Commit or stash changes first.'
 }
 
 $refs = @(git for-each-ref --format='%(refname)' refs/heads refs/tags)
 if (-not $refs) {
-  throw 'В репозитории нет локальных веток или тегов для обработки.'
+  throw 'No local branches or tags were found to process.'
 }
 
 $oldEmailB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($OldEmail))
@@ -48,10 +48,10 @@ $envFilter = $envFilter.Replace('__OLD_EMAIL_B64__', $oldEmailB64)
 $envFilter = $envFilter.Replace('__NEW_EMAIL_B64__', $newEmailB64)
 $envFilter = $envFilter.Replace('__NEW_NAME_B64__', $newNameB64)
 
-Write-Host "Перепривязываю '$OldEmail' к '$NewEmail'..."
+Write-Host "Rewriting '$OldEmail' to '$NewEmail'..."
 git filter-branch -f --env-filter $envFilter --tag-name-filter cat -- $refs
 if ($LASTEXITCODE -ne 0) {
-  throw 'Git не смог переписать историю.'
+  throw 'Git could not rewrite the history.'
 }
 
 git config user.name $NewName
@@ -61,15 +61,15 @@ if ($Push) {
   $remote = git remote get-url origin
   $branch = git branch --show-current
   if (-not $branch) { throw 'Не удалось определить текущую ветку.' }
-  Write-Host "Отправляю переписанную ветку '$branch' в $remote..."
+  Write-Host "Pushing rewritten branch '$branch' to $remote..."
   git push --force-with-lease origin "$branch"
   if ($LASTEXITCODE -ne 0) {
-    throw 'История переписана локально, но отправка в GitHub не удалась.'
+    throw 'History was rewritten locally, but pushing to GitHub failed.'
   }
 } else {
-  Write-Host 'Готово локально. Для обновления GitHub запусти скрипт с параметром -Push.'
+  Write-Host 'Done locally. Use -Push to update GitHub.'
 }
 
-Write-Host 'Новая подпись Git:'
+Write-Host 'New Git identity:'
 git config user.name
 git config user.email
