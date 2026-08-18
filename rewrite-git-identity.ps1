@@ -23,30 +23,7 @@ if (-not $refs) {
   throw 'No local branches or tags were found to process.'
 }
 
-$oldEmailB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($OldEmail))
-$newEmailB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($NewEmail))
-$newNameB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($NewName))
-
-# Base64 avoids quoting problems when an email or name contains shell characters.
-$envFilter = @'
-decode_b64() { printf '%s' "$1" | base64 -d; }
-OLD_EMAIL="$(decode_b64 '__OLD_EMAIL_B64__')"
-NEW_EMAIL="$(decode_b64 '__NEW_EMAIL_B64__')"
-NEW_NAME="$(decode_b64 '__NEW_NAME_B64__')"
-
-if [ "$GIT_AUTHOR_EMAIL" = "$OLD_EMAIL" ]; then
-  GIT_AUTHOR_EMAIL="$NEW_EMAIL"
-  GIT_AUTHOR_NAME="$NEW_NAME"
-fi
-if [ "$GIT_COMMITTER_EMAIL" = "$OLD_EMAIL" ]; then
-  GIT_COMMITTER_EMAIL="$NEW_EMAIL"
-  GIT_COMMITTER_NAME="$NEW_NAME"
-fi
-export GIT_AUTHOR_EMAIL GIT_AUTHOR_NAME GIT_COMMITTER_EMAIL GIT_COMMITTER_NAME
-'@
-$envFilter = $envFilter.Replace('__OLD_EMAIL_B64__', $oldEmailB64)
-$envFilter = $envFilter.Replace('__NEW_EMAIL_B64__', $newEmailB64)
-$envFilter = $envFilter.Replace('__NEW_NAME_B64__', $newNameB64)
+$envFilter = 'if [ "$GIT_AUTHOR_EMAIL" = "' + $OldEmail + '" ]; then GIT_AUTHOR_EMAIL="' + $NewEmail + '"; GIT_AUTHOR_NAME="' + $NewName + '"; fi; if [ "$GIT_COMMITTER_EMAIL" = "' + $OldEmail + '" ]; then GIT_COMMITTER_EMAIL="' + $NewEmail + '"; GIT_COMMITTER_NAME="' + $NewName + '"; fi; export GIT_AUTHOR_EMAIL GIT_AUTHOR_NAME GIT_COMMITTER_EMAIL GIT_COMMITTER_NAME'
 
 Write-Host "Rewriting '$OldEmail' to '$NewEmail'..."
 git filter-branch -f --env-filter $envFilter --tag-name-filter cat -- $refs
