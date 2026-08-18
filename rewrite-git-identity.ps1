@@ -31,6 +31,14 @@ if ($LASTEXITCODE -ne 0) {
   throw 'Git could not rewrite the history.'
 }
 
+# filter-branch creates local backup refs; remove them so the old identity is
+# not retained in the repository's reachable local references.
+@(git for-each-ref --format='%(refname)' refs/original) | ForEach-Object {
+  git update-ref -d $_
+}
+git reflog expire --expire=now --all
+git gc --prune=now
+
 git config user.name $NewName
 git config user.email $NewEmail
 
