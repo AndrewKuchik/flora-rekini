@@ -273,10 +273,11 @@
 
     <div class="group">
       <p class="gt">Облако и архив</p>
-      <button class="btn ghost sm" id="cloudBtn" type="button">☁ Подключить облако</button>
+      <button class="btn ghost sm" id="cloudBtn" type="button" style="display:none">☁ Облако</button>
+      <button class="btn ghost sm" id="copyCloudLink" type="button">🔗 Копировать ссылку для телефона</button>
       <button class="btn ghost sm" id="importPdfBtn" type="button" style="margin-top:7px">⇧ Загрузить PDF для правки</button>
       <input type="file" id="importPdfFile" accept="application/pdf" hidden>
-      <div id="cloudStatus" class="cloud-status">Локальный черновик сохранён на этом устройстве</div>
+      <div id="cloudStatus" class="cloud-status">Облако включается автоматически по этой ссылке</div>
       <div id="archiveList" class="archive-list"></div>
     </div>
 
@@ -1065,7 +1066,32 @@ document.getElementById('photoClientBtn').addEventListener('click',function(){do
 document.getElementById('photoClientFile').addEventListener('change',async function(e){var file=e.target.files[0],status=document.getElementById('ocrStatus');if(!file)return;if(!window.Tesseract){status.textContent='OCR-библиотека не загрузилась. Заполни реквизиты вручную.';status.className='cloud-status error';return;}status.textContent='Распознаю фото… это может занять до минуты';try{var result=await Tesseract.recognize(file,'eng+rus',{logger:function(m){if(m.status==='recognizing text')status.textContent='Распознаю фото… '+Math.round((m.progress||0)*100)+'%';}});fillFromOcr(result.data.text||'');status.textContent='Готово. Проверь распознанные поля и сохрани клиента.';status.className='cloud-status online';}catch(err){status.textContent='Не удалось распознать фото. Заполни реквизиты вручную.';status.className='cloud-status error';}e.target.value='';});
 
 syncLegacyService();buildServiceEditor();renderArchive();render();localSave();
-if(cloudCfg.url&&cloudCfg.pin){setCloudStatus('Подключаем облако…');pullCloud();}
+
+/* Cloudflare Pages mode: no password and no cloud setup form in the UI.
+   The same URL carries a random workspace id in its hash; the Worker keeps
+   metadata in D1 and PDF binaries in KV. */
+localStorage.removeItem('flora_cloud');
+var cfWorkspace='';
+try { cfWorkspace=new URLSearchParams(location.hash.slice(1)).get('w')||''; } catch (_) {}
+if(!/^[a-zA-Z0-9_-]{20,100}$/.test(cfWorkspace)){
+  cfWorkspace=crypto.randomUUID().replace(/-/g,'');
+  history.replaceState(null,'',location.pathname+location.search+'#w='+cfWorkspace);
+}
+var cfApi='/api';
+var cfTimer=null;
+function cfHeaders(extra){return Object.assign({'X-Flora-Workspace':cfWorkspace},extra||{});}
+function cfPayload(){var data={profile:P,clients:CL,services:SV,invoices:archive.map(function(item){var copy=Object.assign({},item);delete copy.pdfData;return copy;}),draft:safeDraft()};return data;}
+function cfIsAvailable(){return location.protocol==='http:'||location.protocol==='https:';}
+async function cfSyncArchiveFiles(){for(var item of archive){if(item.pdfData&&!item.pdfStored){try{var response=await fetch(item.pdfData),blob=await response.blob();if(await cfUploadPdf(item.id,blob))item.pdfStored=true;}catch(e){}}}}
+async function cfPut(){if(!cfIsAvailable())return;try{await cfSyncArchiveFiles();var response=await fetch(cfApi+'/state',{method:'PUT',headers:cfHeaders({'Content-Type':'application/json'}),body:JSON.stringify(cfPayload())});if(!response.ok)throw new Error('HTTP '+response.status);setCloudStatus('Облако синхронизировано','online');}catch(e){setCloudStatus('Локально сохранено · облако будет подключено после деплоя','');}}
+async function cfUploadPdf(id,blob){if(!cfIsAvailable()||!blob)return false;try{var response=await fetch(cfApi+'/pdf/'+encodeURIComponent(id),{method:'PUT',headers:cfHeaders({'Content-Type':'application/pdf'}),body:blob});if(!response.ok)throw new Error('HTTP '+response.status);return true;}catch(e){return false;}}
+async function cfPull(){if(!cfIsAvailable())return;try{var response=await fetch(cfApi+'/state',{headers:cfHeaders(),cache:'no-store'});if(!response.ok)throw new Error('offline');var remote=await response.json();if(!remote.updatedAt&&P.legalName||!remote.updatedAt&&CL.length||!remote.updatedAt&&archive.length){await cfPut();return;}P=Object.assign({},DEFAULT_PROFILE,remote.profile||{});CL=Array.isArray(remote.clients)?remote.clients:[];SV=Array.isArray(remote.services)?remote.services:SV;archive=Array.isArray(remote.invoices)?remote.invoices:[];if(remote.draft)Object.assign(state,remote.draft);if(!Array.isArray(state.items))state.items=[{desc:state.desc||'',price:state.price||'',qty:state.qty||'1',unit:state.unit||'gab.'}];store.saveProfile(P);store.saveClients(CL);store.saveServices(SV);syncLegacyService();fillForm();initClientPicker(0);buildServiceEditor();buildSvcChips();refreshLogoUI();applyTheme();render();localSave();renderArchive();setCloudStatus('Облако подключено автоматически','online');}catch(e){setCloudStatus('Локальный режим · облако подключится после деплоя','');}}
+persist=function(){localSave();clearTimeout(cfTimer);cfTimer=setTimeout(cfPut,1200);};
+pushCloud=cfPut;pullCloud=cfPull;
+document.getElementById('copyCloudLink').addEventListener('click',async function(){var link=location.href;try{await navigator.clipboard.writeText(link);setCloudStatus('Ссылка скопирована · откройте её на телефоне','online');}catch(e){window.prompt('Скопируйте ссылку на телефон:',link);}});
+replaceButton('pdfBtn',async function(){var btn=this,old=btn.textContent;btn.textContent='Готовлю PDF…';btn.disabled=true;try{var result=await makePDF(),record=invoiceRecord(await new Promise(function(resolve){var r=new FileReader();r.onloadend=function(){resolve(r.result);};r.readAsDataURL(result.blob);}));archive.push(record);var stored=await cfUploadPdf(record.id,result.blob);record.pdfStored=stored;persist();renderArchive();await cfPut();}catch(e){alert('Не удалось собрать PDF: '+(e.message||e));}finally{btn.textContent=old;btn.disabled=false;}});
+var oldDetailDownload=document.getElementById('detailDownload');oldDetailDownload.replaceWith(oldDetailDownload.cloneNode(true));document.getElementById('detailDownload').addEventListener('click',async function(){if(!selectedArchive)return;var data=selectedArchive.pdfData;if(!data&&selectedArchive.pdfStored){var response=await fetch(cfApi+'/pdf/'+encodeURIComponent(selectedArchive.id),{headers:cfHeaders(),cache:'no-store'});if(response.ok){var blob=await response.blob();data=URL.createObjectURL(blob);}}if(!data){alert('Файл пока недоступен');return;}var a=document.createElement('a');a.href=data;a.download='Rekins_'+selectedArchive.number+'.pdf';a.click();if(data.indexOf('blob:')===0)setTimeout(function(){URL.revokeObjectURL(data);},1000);});
+if(cfIsAvailable())cfPull();
 </script>
 </body>
 </html>
