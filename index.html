@@ -447,7 +447,7 @@ const state = {
   number:String(P.nextNumber), issueDate:todayISO(), dueDate:addDaysISO(todayISO(),P.dueDays),
   cName:c0.name, cReg:c0.regNr, cVat:c0.vatNr, cAddr:c0.addr,
   cIban:c0.iban||'', cBank:c0.bank||'', cSwift:c0.swift||'',
-  desc:c0.defDesc||'', price:'', qty:'1', unit:'gab.'
+  desc:c0.defDesc||'', price:'', qty:'1', unit:'gab.', dueDateAuto:true
 };
 
 function calc(){
@@ -921,6 +921,10 @@ try { savedDraft = JSON.parse(localStorage.getItem('flora_draft') || 'null'); } 
 if (savedDraft) Object.assign(state, savedDraft);
 if (!Array.isArray(state.items)) state.items = [{desc:state.desc || '', price:state.price || '', qty:state.qty || '1', unit:state.unit || 'gab.'}];
 state.items = state.items.map(function(item){ return Object.assign({desc:'',price:'',qty:'1',unit:'gab.'}, item); });
+if (typeof state.dueDateAuto !== 'boolean') {
+  var savedIssueDate = state.issueDate || todayISO();
+  state.dueDateAuto = !state.dueDate || state.dueDate === addDaysISO(savedIssueDate, P.dueDays);
+}
 var archive = [];
 try { archive = JSON.parse(localStorage.getItem('flora_invoices') || '[]'); } catch (_) { archive = []; }
 var cloudCfg = {};
@@ -1039,7 +1043,7 @@ document.getElementById('detailEdit').addEventListener('click',function(){if(!se
 document.getElementById('detailDelete').addEventListener('click',function(){if(!selectedArchive||!confirm('Удалить PDF из архива?')||!confirm('Точно удалить?'))return;archive=archive.filter(function(x){return x.id!==selectedArchive.id;});persist();renderArchive();document.getElementById('detailModalBg').style.display='none';if(cloudCfg.url)pushCloud();});
 
 replaceButton('pdfBtn',async function(){var btn=this,old=btn.textContent;btn.textContent='Готовлю PDF…';btn.disabled=true;try{var result=await makePDF();var reader=new FileReader();reader.onloadend=function(){archive.push(invoiceRecord(reader.result));persist();renderArchive();pushCloud();};reader.readAsDataURL(result.blob);}catch(e){alert('Не удалось собрать PDF: '+(e.message||e));}finally{btn.textContent=old;btn.disabled=false;}});
-replaceButton('newBtn',function(){var used=parseInt(state.number,10);if(!isNaN(used)){P.nextNumber=used+1;store.saveProfile(P);}state.number=String(P.nextNumber);state.issueDate=todayISO();state.dueDate=addDaysISO(state.issueDate,P.dueDays);state.items=[{desc:'',price:'',qty:'1',unit:'gab.'}];delete state.sourcePdf;syncLegacyService();fillForm();buildServiceEditor();render();persist();});
+replaceButton('newBtn',function(){var used=parseInt(state.number,10);if(!isNaN(used)){P.nextNumber=used+1;store.saveProfile(P);}state.number=String(P.nextNumber);state.issueDate=todayISO();state.dueDate=addDaysISO(state.issueDate,P.dueDays);state.dueDateAuto=true;state.items=[{desc:'',price:'',qty:'1',unit:'gab.'}];delete state.sourcePdf;syncLegacyService();fillForm();buildServiceEditor();render();persist();});
 
 document.getElementById('cloudBtn').addEventListener('click',function(){if(cloudCfg.url&&cloudCfg.pin){pullCloud();return;}document.getElementById('m_cloudUrl').value=cloudCfg.url||'/api/state';document.getElementById('m_cloudPin').value=cloudCfg.pin||'';document.getElementById('cloudModalBg').style.display='flex';});
 document.getElementById('cloudCancel').addEventListener('click',function(){document.getElementById('cloudModalBg').style.display='none';});
@@ -1066,6 +1070,32 @@ document.getElementById('photoClientBtn').addEventListener('click',function(){do
 document.getElementById('photoClientFile').addEventListener('change',async function(e){var file=e.target.files[0],status=document.getElementById('ocrStatus');if(!file)return;if(!window.Tesseract){status.textContent='OCR-библиотека не загрузилась. Заполни реквизиты вручную.';status.className='cloud-status error';return;}status.textContent='Распознаю фото… это может занять до минуты';try{var result=await Tesseract.recognize(file,'eng+rus',{logger:function(m){if(m.status==='recognizing text')status.textContent='Распознаю фото… '+Math.round((m.progress||0)*100)+'%';}});fillFromOcr(result.data.text||'');status.textContent='Готово. Проверь распознанные поля и сохрани клиента.';status.className='cloud-status online';}catch(err){status.textContent='Не удалось распознать фото. Заполни реквизиты вручную.';status.className='cloud-status error';}e.target.value='';});
 
 syncLegacyService();buildServiceEditor();renderArchive();render();localSave();
+
+/* Date automation: a new invoice uses today; the due date follows the issue date. */
+document.getElementById('issueDate').addEventListener('change',function(){
+  state.issueDate=this.value||todayISO();
+  if(state.dueDateAuto!==false){
+    state.dueDate=addDaysISO(state.issueDate,P.dueDays);
+    setVal('dueDate',state.dueDate);
+  }
+  render();
+  persist();
+});
+document.getElementById('dueDate').addEventListener('input',function(){ state.dueDateAuto=false; });
+document.querySelectorAll('.chip[data-due]').forEach(function(chip){
+  chip.addEventListener('click',function(){
+    state.dueDateAuto = chip.dataset.due === String(P.dueDays);
+    persist();
+  });
+});
+document.getElementById('modalSave').addEventListener('click',function(){
+  if(state.dueDateAuto!==false){
+    state.dueDate=addDaysISO(state.issueDate,P.dueDays);
+    setVal('dueDate',state.dueDate);
+    render();
+  }
+  persist();
+});
 
 /* Cloudflare Pages mode: no password and no cloud setup form in the UI.
    The same URL carries a random workspace id in its hash; the Worker keeps
