@@ -163,6 +163,11 @@
   .detail-grid{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:12px;margin:16px 0}
   .detail-grid .k{color:var(--muted)}
   .modal-wide{max-width:560px}
+  .import-pdf-layout{display:grid;grid-template-columns:minmax(0,1fr) 210px;gap:12px;align-items:start;margin:10px 0 14px}
+  .import-pdf-preview{width:100%;height:280px;border:1px solid var(--line);border-radius:10px;background:#f5f5f5}
+  .import-pdf-help{font-size:11px;line-height:1.45;color:var(--muted);padding:10px;background:var(--accent-soft);border-radius:10px}
+  .import-pdf-status{font-size:11px;line-height:1.4;color:var(--muted);margin:7px 0}
+  @media(max-width:620px){.import-pdf-layout{grid-template-columns:1fr}.import-pdf-preview{height:220px}}
   .modal input[type=file]{padding:7px}
 
   /* ---------- мобильные экраны ---------- */
@@ -357,7 +362,14 @@
 </div>
 
 <div class="modal-bg" id="importModalBg">
-  <div class="modal">
+  <div class="modal modal-wide">
+    <div class="import-pdf-layout">
+      <iframe id="importPdfPreview" class="import-pdf-preview" title="PDF preview"></iframe>
+      <div>
+        <div class="import-pdf-help">Оригинал сохраняется без изменений. После открытия создаётся редактируемая копия по шаблону FLORA.</div>
+        <div id="importPdfStatus" class="import-pdf-status">Готовлю предпросмотр и распознавание…</div>
+      </div>
+    </div>
     <h3>PDF загружен</h3>
     <p class="msub" id="importFileName">Укажите данные счёта, которые нужно исправить. Оригинал останется в архиве.</p>
     <label class="f"><span>Номер счёта</span><input id="m_importNumber"></label>
@@ -377,6 +389,7 @@
      Если файла нет (напр. на публичной странице) — приложение просто спросит реквизиты при первом запуске. -->
 <script src="my-data.local.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 <script>
 /* ============================================================
@@ -1095,6 +1108,197 @@ document.getElementById('modalSave').addEventListener('click',function(){
     render();
   }
   persist();
+});
+
+/* PDF import/editor and stricter requisites OCR. */
+function floraLines(text){
+  return String(text||'').replace(/[\u00a0|]+/g,' ').split(/\r?\n/).map(function(line){return line.replace(/\s+/g,' ').trim();}).filter(Boolean);
+}
+function floraClean(value){
+  return String(value||'').replace(/[|]+/g,' ').replace(/\s+/g,' ').replace(/^[:#.,;\-\s]+|[:#.,;\-\s]+$/g,'').trim();
+}
+function floraNextLine(lines,labelRe){
+  for(var i=0;i<lines.length;i++){
+    var match=lines[i].match(labelRe); if(!match) continue;
+    var before=lines[i].slice(0,match.index).trim();
+    var same=floraClean(lines[i].slice(match.index+match[0].length));
+    var contextual=!before||/[:#\-]$/.test(before)||/(?:pakalpojuma|service|recipient|customer|buyer|invoice|r[\u0113e]ķina|re[k\u0113]ķina)/i.test(before);
+    if(same&&contextual) return same;
+    for(var j=i+1;j<Math.min(lines.length,i+3);j++){
+      if(lines[j]&&!labelRe.test(lines[j])) return floraClean(lines[j]);
+    }
+  }
+  return '';
+}
+function floraParseBusiness(text){
+  var lines=floraLines(text), all=lines.join(' '), out={};
+  var regLabel=/(?:registration|reg(?:istrācijas)?\.?|re[\u0123g]\.?)[\s]*(?:nr|no|number|numurs)?/i;
+  var vatLabel=/(?:pvn|vat|tax\s*(?:no|number)?)/i;
+  var addressLabel=/(?:adrese|address|iela|street|str\.?|laukums|road)/i;
+  var bankLabel=/(?:banka|bank)/i;
+  var nameLabel=/(?:company|name|client|customer|buyer|recipient|sa[\u0146]em[\u0113]js|nosaukums)/i;
+  var reg=floraNextLine(lines,regLabel);
+  var regNumber=reg.match(/\b\d{8,14}\b/);
+  if(regNumber) out.regNr=regNumber[0];
+  var vat=floraNextLine(lines,vatLabel);
+  var vatNumber=vat.match(/\b(?:LV\s*)?\d{8,14}\b/i);
+  if(vatNumber) out.vatNr=vatNumber[0].replace(/\s+/g,'').toUpperCase();
+  var ibanMatch=all.match(/\bLV(?:\s?\d){2}\s?[A-Z](?:\s?[A-Z]){3}(?:\s?\d){13}\b/i);
+  if(ibanMatch) out.iban=ibanMatch[0].replace(/\s+/g,'').toUpperCase();
+  var swiftLabel=floraNextLine(lines,/(?:swift|bic)/i), swiftMatch=(swiftLabel&&swiftLabel.match(/\b[A-Z]{4}[A-Z0-9]{4,7}\b/))||all.match(/\b[A-Z]{4}[A-Z0-9]{4,7}\b/);
+  if(swiftMatch&&!/^(?:CLIENT|CUSTOMER|NUMBER|INVOICE)$/i.test(swiftMatch[0])) out.swift=swiftMatch[0].toUpperCase();
+  var address=floraNextLine(lines,addressLabel);
+  if(!address) address=lines.find(function(line){return /(?:\bLV[- ]?\d{4}\b|\b\d{4}\b.*(?:iela|street|str\.?|laukums))/i.test(line);})||'';
+  if(address&&address.length<160) out.addr=address;
+  var bank=floraNextLine(lines,bankLabel);
+  if(bank&&bank.length<100&&!/^(?:bank|banka)$/i.test(bank)) out.bank=bank;
+  var named=lines.find(function(line){return /\b(?:SIA|AS|Biedr\w+|Ltd|LLC|O[ÜU]|Inc)\b/i.test(line)&&line.length<140;});
+  if(!named) named=floraNextLine(lines,nameLabel);
+  if(named&&named.length>2&&named.length<140&&!/^\d+$/.test(named)&&!/(?:invoice|r[\u0113e]ķins|pvn|vat|iban|bank|adrese|address)/i.test(named)) out.name=named;
+  return out;
+}
+function floraDateISO(value){
+  var v=String(value||'').trim(), m=v.match(/\b(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})\b/);
+  if(m) return m[3]+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0');
+  m=v.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
+  return m ? m[1]+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[3]).padStart(2,'0') : '';
+}
+function floraDateAfter(lines,labelRe){
+  for(var i=0;i<lines.length;i++){
+    if(!labelRe.test(lines[i])) continue;
+    var same=floraDateISO(lines[i]); if(same) return same;
+    for(var j=i+1;j<Math.min(lines.length,i+3);j++){var next=floraDateISO(lines[j]);if(next)return next;}
+  }
+  return '';
+}
+function floraParseItems(lines){
+  var items=[];
+  lines.forEach(function(line){
+    if(line.length<4||line.length>180||/(?:kopsumma|pavisam|total|subtotal|pvn|vat|due|apmaks|invoice|r[\u0113e]ķins)/i.test(line)) return;
+    if(!/(?:€|eur|gab\.?|reize|diena|komplekts|hour|h\b)/i.test(line)) return;
+    var first=line.search(/\d/); if(first<2) return;
+    var desc=floraClean(line.slice(0,first));
+    var nums=line.match(/\d+(?:[,.]\d{1,2})?/g)||[];
+    if(!desc||nums.length<2||desc.length>120) return;
+    var amount=nums[nums.length-1], price=nums.length>2?nums[nums.length-3]:nums[nums.length-2], qty=nums.length>2?nums[nums.length-2]:'1';
+    if(!/\d/.test(price)) return;
+    items.push({desc:desc,price:price.replace(',','.'),qty:qty.replace(',','.'),unit:'gab.'});
+  });
+  return items.slice(0,20);
+}
+function floraParseInvoiceText(text){
+  var lines=floraLines(text), joined=lines.join(' '), business=floraParseBusiness(text), out={profile:business,items:floraParseItems(lines)};
+  var numberMatch=joined.match(/(?:invoice|r[\u0113e]ķins|r[\u0113e]ķina|сч[её]т)\s*(?:nr|no|№)?\s*[:#.-]?\s*(\d{1,10})/i)||joined.match(/\b(?:nr|no|№)\s*[:#.-]?\s*(\d{1,10})\b/i);
+  out.number=numberMatch?numberMatch[1]:'';
+  out.issueDate=floraDateAfter(lines,/(?:issue|invoice|r[\u0113e]ķina?\s+datums|date|дата)/i);
+  out.dueDate=floraDateAfter(lines,/(?:due|apmaks[aā]t\s+l[iī]dz|оплатить\s*до)/i);
+  var allDates=lines.map(floraDateISO).filter(Boolean);
+  if(!out.issueDate) out.issueDate=allDates[0]||'';
+  if(!out.dueDate) out.dueDate=allDates[1]||'';
+  out.client=floraNextLine(lines,/(?:client|customer|buyer|recipient|sa[\u0146]em[\u0113]js|получатель)/i)||business.name||'';
+  var totalMatch=joined.match(/(?:total|subtotal|pavisam|kopsumma|apmaksai|summa)[^\d]{0,30}(\d+[,.]\d{2})/i);
+  out.total=totalMatch?parseFloat(totalMatch[1].replace(',','.')):out.items.reduce(function(sum,item){return sum+serviceTotal(item);},0);
+  return out;
+}
+function floraPdfBytes(dataUrl){
+  var raw=atob(String(dataUrl).split(',')[1]||''), bytes=new Uint8Array(raw.length);
+  for(var i=0;i<raw.length;i++) bytes[i]=raw.charCodeAt(i);
+  return bytes;
+}
+async function floraExtractPdfText(dataUrl,status){
+  if(!window.pdfjsLib) return '';
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  var pdf=await window.pdfjsLib.getDocument({data:floraPdfBytes(dataUrl)}).promise, chunks=[];
+  for(var pageNo=1;pageNo<=pdf.numPages;pageNo++){
+    var page=await pdf.getPage(pageNo), content=await page.getTextContent(), rows={};
+    content.items.forEach(function(item){var y=Math.round((item.transform&&item.transform[5]||0)/2)*2;(rows[y]||(rows[y]=[])).push(item.str);});
+    chunks.push(Object.keys(rows).sort(function(a,b){return Number(b)-Number(a);}).map(function(y){return rows[y].join(' ');}).join('\n'));
+    if(status) status.textContent='Читаю PDF… страница '+pageNo+' из '+pdf.numPages;
+  }
+  return chunks.join('\n');
+}
+async function floraOcrPdf(dataUrl,status){
+  if(!window.pdfjsLib||!window.Tesseract) return '';
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  var pdf=await window.pdfjsLib.getDocument({data:floraPdfBytes(dataUrl)}).promise, chunks=[];
+  var count=Math.min(pdf.numPages,4);
+  for(var pageNo=1;pageNo<=count;pageNo++){
+    var page=await pdf.getPage(pageNo), viewport=page.getViewport({scale:1.7}), canvas=document.createElement('canvas');
+    canvas.width=Math.ceil(viewport.width); canvas.height=Math.ceil(viewport.height);
+    await page.render({canvasContext:canvas.getContext('2d'),viewport:viewport}).promise;
+    if(status) status.textContent='Распознаю PDF… страница '+pageNo+' из '+count;
+    var result=await window.Tesseract.recognize(canvas,'eng+rus');
+    chunks.push(result.data.text||'');
+  }
+  return chunks.join('\n');
+}
+async function floraReadPdf(dataUrl,status){
+  var text=await floraExtractPdfText(dataUrl,status);
+  if(String(text).replace(/\s/g,'').length<40) text=await floraOcrPdf(dataUrl,status);
+  return text||'';
+}
+fillFromOcr=function(text){
+  var parsed=floraParseBusiness(text);
+  if(parsed.name) state.cName=parsed.name;
+  if(parsed.regNr) state.cReg=parsed.regNr;
+  if(parsed.vatNr) state.cVat=parsed.vatNr;
+  if(parsed.addr) state.cAddr=parsed.addr;
+  if(parsed.iban) state.cIban=parsed.iban;
+  if(parsed.bank) state.cBank=parsed.bank;
+  if(parsed.swift) state.cSwift=parsed.swift;
+  fillForm();persist();render();
+  return parsed;
+};
+function floraSetImportFields(parsed){
+  document.getElementById('m_importNumber').value=parsed.number||state.number;
+  document.getElementById('m_importClient').value=parsed.client||state.cName;
+  document.getElementById('m_importDate').value=parsed.issueDate||state.issueDate||todayISO();
+  document.getElementById('m_importDueDate').value=parsed.dueDate||addDaysISO(document.getElementById('m_importDate').value,P.dueDays);
+}
+var importInput=document.getElementById('importPdfFile');
+var freshImportInput=importInput.cloneNode(true); importInput.replaceWith(freshImportInput);
+freshImportInput.addEventListener('change',function(e){
+  var file=e.target.files[0]; if(!file)return;
+  var reader=new FileReader();
+  reader.onload=async function(){
+    var dataUrl=reader.result, status=document.getElementById('importPdfStatus');
+    pendingImport={name:file.name,dataUrl:dataUrl,parsed:{}};
+    document.getElementById('importFileName').textContent=file.name+' · оригинал сохранится в архиве';
+    document.getElementById('importPdfPreview').src=dataUrl;
+    document.getElementById('importModalBg').style.display='flex';
+    status.textContent='Читаю PDF и ищу номер, даты, клиента и услуги…';
+    try{
+      var text=await floraReadPdf(dataUrl,status), parsed=floraParseInvoiceText(text);
+      pendingImport.text=text; pendingImport.parsed=parsed; floraSetImportFields(parsed);
+      status.textContent=(parsed.items.length?'Распознано услуг: '+parsed.items.length+'. ':'Текст счёта не найден автоматически. ')+'Проверьте поля и откройте копию для правки.';
+    }catch(err){
+      status.textContent='Не удалось автоматически прочитать PDF. Оригинал открыт ниже — заполните поля вручную.';
+      floraSetImportFields({});
+    }
+  };
+  reader.readAsDataURL(file);
+});
+var importCancel=document.getElementById('importCancel'), freshImportCancel=importCancel.cloneNode(true); importCancel.replaceWith(freshImportCancel);
+freshImportCancel.addEventListener('click',function(){pendingImport=null;document.getElementById('importModalBg').style.display='none';freshImportInput.value='';});
+var importContinue=document.getElementById('importContinue'), freshImportContinue=importContinue.cloneNode(true); importContinue.replaceWith(freshImportContinue);
+freshImportContinue.addEventListener('click',function(){
+  if(!pendingImport)return;
+  var parsed=pendingImport.parsed||{}, number=document.getElementById('m_importNumber').value||state.number;
+  var issueDate=document.getElementById('m_importDate').value||todayISO(), dueDate=document.getElementById('m_importDueDate').value||addDaysISO(issueDate,P.dueDays), client=document.getElementById('m_importClient').value||'';
+  var items=(parsed.items&&parsed.items.length?parsed.items:[{desc:'',price:'',qty:'1',unit:'gab.'}]).map(function(item){return Object.assign({desc:'',price:'',qty:'1',unit:'gab.'},item);});
+  var imported={id:'imp_'+Date.now(),number:number,date:issueDate,dueDate:dueDate,client:client,total:parsed.total||items.reduce(function(sum,item){return sum+serviceTotal(item);},0),items:JSON.parse(JSON.stringify(items)),pdfData:pendingImport.dataUrl,createdAt:new Date().toISOString(),imported:true,sourceText:pendingImport.text||''};
+  archive.push(imported);
+  state.number=number; state.issueDate=issueDate; state.dueDate=dueDate; state.dueDateAuto=false; state.cName=client; state.items=items; state.sourcePdf=imported;
+  if(parsed.profile){state.cReg=parsed.profile.regNr||state.cReg;state.cVat=parsed.profile.vatNr||state.cVat;state.cAddr=parsed.profile.addr||state.cAddr;state.cIban=parsed.profile.iban||state.cIban;state.cBank=parsed.profile.bank||state.cBank;state.cSwift=parsed.profile.swift||state.cSwift;}
+  syncLegacyService();fillForm();buildServiceEditor();render();persist();renderArchive();
+  document.getElementById('importModalBg').style.display='none';freshImportInput.value='';pendingImport=null;
+  alert('Оригинал сохранён в архиве. Поля PDF перенесены в редактор FLORA — проверьте их слева и скачайте новую версию.');
+});
+var detailEditButton=document.getElementById('detailEdit'), freshDetailEdit=detailEditButton.cloneNode(true); detailEditButton.replaceWith(freshDetailEdit);
+freshDetailEdit.addEventListener('click',function(){
+  if(!selectedArchive)return;
+  Object.assign(state,{number:String(selectedArchive.number),issueDate:selectedArchive.date||todayISO(),dueDate:selectedArchive.dueDate||addDaysISO(selectedArchive.date||todayISO(),P.dueDays),dueDateAuto:false,cName:selectedArchive.client||'',cReg:selectedArchive.regNr||'',cVat:selectedArchive.vatNr||'-',cAddr:selectedArchive.addr||'',cIban:selectedArchive.iban||'',cBank:selectedArchive.bank||'',cSwift:selectedArchive.swift||'',items:JSON.parse(JSON.stringify(selectedArchive.items||[{desc:'',price:'',qty:'1',unit:'gab.'}]))});
+  state.sourcePdf=selectedArchive;syncLegacyService();fillForm();buildServiceEditor();render();persist();document.getElementById('detailModalBg').style.display='none';
 });
 
 /* Cloudflare Pages mode: no password and no cloud setup form in the UI.
